@@ -36,66 +36,66 @@ function broadcastCam(x,y,z, firstConnect) {
     recordingTestData && testData.push([x,y,z])
 }
 
-function _runCmd() {
-    let cmd = 'bin/euler_60';
-    if (process.platform === 'darwin') {
-        cmd = 'bin/euler_60_apple_silicon';
-    }
-    return require('child_process').spawn(cmd, {shell: process.platform !== 'win32'});
-}
+// function _runCmd() {
+//     let cmd = 'bin/euler_60';
+//     if (process.platform === 'darwin') {
+//         cmd = 'bin/euler_60_apple_silicon';
+//     }
+//     return require('child_process').spawn(cmd, {shell: process.platform !== 'win32'});
+// }
 
-(function _respawn(spawned) {
-    spawned.on('error', err => {
-        log(`Failed to start euler_60: ${err}`);
-    });
-    spawned.stdout.on('data', data => {
-        const eulers = data.toString().split(/\s+/);
-        const rawZ = parseFloat(eulers[1]);
-        if (!isNaN(rawZ)) {
-            const rawX = parseFloat(eulers[2]),
-                rawY = parseFloat(eulers[3]);
+// (function _respawn(spawned) {
+//     spawned.on('error', err => {
+//         log(`Failed to start euler_60: ${err}`);
+//     });
+//     spawned.stdout.on('data', data => {
+//         const eulers = data.toString().split(/\s+/);
+//         const rawZ = parseFloat(eulers[1]);
+//         if (!isNaN(rawZ)) {
+//             const rawX = parseFloat(eulers[2]),
+//                 rawY = parseFloat(eulers[3]);
 
-            let firstConnect = false;
+//             let firstConnect = false;
 
-            if (!connected) {
-                log('Headset connected');
-                firstConnect = true;
-                connected = true;
-            }
+//             if (!connected) {
+//                 log('Headset connected');
+//                 firstConnect = true;
+//                 connected = true;
+//             }
 
-            if (calibrating && !calStartY) {
-                calStartY = rawY;
-            }
+//             if (calibrating && !calStartY) {
+//                 calStartY = rawY;
+//             }
 
-            skipFrame = !skipFrame;
-            if (skipFrame && powerSaver) {return}
+//             skipFrame = !skipFrame;
+//             if (skipFrame && powerSaver) {return}
 
-            const totalDrift = (Date.now() - tareTime) * drift;
-            broadcastCam(rawX, totalDrift - rawY, -rawZ, firstConnect);
-        } else {
-            broadcastCam(0, 0, 0);
-        }
-    });
+//             const totalDrift = (Date.now() - tareTime) * drift;
+//             broadcastCam(rawX, totalDrift - rawY, -rawZ, firstConnect);
+//         } else {
+//             broadcastCam(0, 0, 0);
+//         }
+//     });
 
-    spawned.on('close', () => {
-        if (connected) {
-            log('Headset disconnected');
-            connected = false;
-        }
-        if (calibrating) {
-            log('Calibration cancelled');
-            calibrating = false;
-        }
-        if (recordingTestData) {
-            log('Recording cancelled');
-            recordingTestData = false;
-        }
+//     spawned.on('close', () => {
+//         if (connected) {
+//             log('Headset disconnected');
+//             connected = false;
+//         }
+//         if (calibrating) {
+//             log('Calibration cancelled');
+//             calibrating = false;
+//         }
+//         if (recordingTestData) {
+//             log('Recording cancelled');
+//             recordingTestData = false;
+//         }
 
-        setTimeout(() => {
-            _respawn(_runCmd());
-        }, 3000);
-    });
-})(_runCmd());
+//         setTimeout(() => {
+//             _respawn(_runCmd());
+//         }, 3000);
+//     });
+// })(_runCmd());
 
 let port = 8000,
     portIndex = args.indexOf('--port');

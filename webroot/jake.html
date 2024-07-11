@@ -1,0 +1,135 @@
+<html>
+
+<head>
+
+</head>
+
+<body>
+    <button id="connect">Connect</button>
+
+
+    <script>
+        console.log('hello');
+        // Note: WebHID API requires a secure context (HTTPS) and user gesture to request devices.
+
+        // Device constants
+        const NREAL_VID = 0x3318; // 13080
+        const AIR_PID = 0x0424; // 1060
+        const AIR_2_PID = 0x0428; // 1064
+        const AIR_2_PRO_PID = 0x0432; // 1074
+
+        // must be called by a user gesture
+        async function connectToNrealAir() {
+            const filters = [
+                { vendorId: NREAL_VID },
+                { vendorId: NREAL_VID, productId: AIR_PID },
+                { vendorId: NREAL_VID, productId: AIR_2_PID },
+                { vendorId: NREAL_VID, productId: AIR_2_PRO_PID }
+            ];
+
+            try {
+                const [device] = await navigator.hid.requestDevice({ filters });
+                if (!device) {
+                    throw new Error('No device selected');
+                }
+
+                console.warn('got device',{device});
+
+                await device.open();
+                console.log('Device opened:', device);
+
+                return device;
+            } catch (error) {
+                console.error('Failed to connect to Nreal Air:', error);
+            }
+        }
+
+        async function readSerialNumber(device) {
+            try {
+                const result = await runCommand(device, { cmdId: 0x15 });
+                const serialNumber = new TextDecoder().decode(result.slice(1));
+                return serialNumber;
+            } catch (error) {
+                console.error('Failed to read serial number:', error);
+            }
+        }
+
+        async function runCommand(device, command) {
+            console.log('runCommand', {device, command});
+            const commandBuffer = serializeCommand(command);
+            const reportId = 0; // Adjust based on device.collections output
+
+            try {
+                await device.sendFeatureReport(reportId, commandBuffer); // Ensure this reportId is correct
+                for (let i = 0; i < 10; i++) { // Reduce the number of iterations to prevent too many attempts
+                    const response = await device.receiveFeatureReport(reportId); // Ensure this is the correct reportId
+                    const parsedResponse = parsePacket(new DataView(response.buffer));
+                    if (parsedResponse.cmdId === command.cmdId) {
+                        console.log('Command Response Received:', parsedResponse);
+                        return parsedResponse.data;
+                    } else {
+                        console.warn('Unexpected cmdId', {
+                            got: parsedResponse.cmdId,
+                            expected: command.cmdId
+                        });
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to run command:', error);
+                throw error; // Rethrow to handle it in the calling function
+            }
+            throw new Error('Received too many unrelated packets');
+        }
+
+
+
+        function serializeCommand(command) {
+            command.data = command.data || []; // Ensure data is defined and is an array
+            const buffer = new ArrayBuffer(64);
+            const view = new DataView(buffer);
+            view.setUint8(0, 0xfd); // Head
+            view.setUint16(1, command.data.length + 17, true); // Length
+            view.setUint32(3, 0x1337, true); // Request ID
+            view.setUint32(7, 0x0, true); // Timestamp
+            view.setUint16(11, command.cmdId, true); // Command ID
+            command.data.forEach((byte, index) => view.setUint8(17 + index, byte));
+            // Calculate checksum (CRC32 Adler)
+            const checksum = crc32Adler(new Uint8Array(buffer.slice(5, 5 + command.data.length + 12)));
+            view.setUint32(1, checksum, true);
+            return new Uint8Array(buffer);
+        }
+
+        function parsePacket(packet) {
+            const view = new DataView(packet.buffer);
+            if (view.getUint8(0) !== 0xfd) {
+                throw new Error('Invalid packet header');
+            }
+            const length = view.getUint16(1, true);
+            const cmdId = view.getUint16(11, true);
+            const data = new Uint8Array(packet.buffer.slice(17, 17 + length - 17));
+            return { cmdId, data };
+        }
+
+        function crc32Adler(data) {
+            let a = 1, b = 0;
+            for (let i = 0; i < data.length; i++) {
+                a = (a + data[i]) % 65521;
+                b = (b + a) % 65521;
+            }
+            return (b << 16) | a;
+        }
+
+        // Example usage:
+        document.getElementById('connect').addEventListener('click', async function () {
+            const device = await connectToNrealAir();
+            if (device) {
+                const serialNumber = await readSerialNumber(device);
+                console.log('Serial Number:', serialNumber);
+            }else{
+                console.error('Failed to Connect');
+            }
+        });
+    </script>
+</body>
+
+</html>
