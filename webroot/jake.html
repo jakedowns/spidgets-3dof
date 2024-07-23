@@ -33,11 +33,12 @@
                     throw new Error('No device selected');
                 }
 
-                console.warn('got device',{device});
-
+                //console.warn('got device',{device});
+                
                 await device.open();
-                console.log('Device opened:', device);
-
+                
+                //console.log('Device opened:', device);
+                
                 return device;
             } catch (error) {
                 console.error('Failed to connect to Nreal Air:', error);
@@ -46,7 +47,7 @@
 
         async function readSerialNumber(device) {
             try {
-                const result = await runCommand(device, { cmdId: 0x15 });
+                const result = await runCommand(device, { cmdId: 0x15, data: [] });
                 const serialNumber = new TextDecoder().decode(result.slice(1));
                 return serialNumber;
             } catch (error) {
@@ -95,8 +96,12 @@
             command.data.forEach((byte, index) => view.setUint8(17 + index, byte));
             // Calculate checksum (CRC32 Adler)
             const checksum = crc32Adler(new Uint8Array(buffer.slice(5, 5 + command.data.length + 12)));
-            view.setUint32(1, checksum, true);
-            return new Uint8Array(buffer);
+            view.setUint32(13 + command.data.length, checksum, true); // Set checksum at the end of the data
+            console.warn({
+                checksum,
+                buffer
+            });
+            return buffer;
         }
 
         function parsePacket(packet) {
@@ -119,10 +124,23 @@
             return (b << 16) | a;
         }
 
+        // Convert buffer to hex representation
+        function bufferToHex(buffer) {
+            const view = new Uint8Array(buffer);
+            return Array.from(view).map(byte => byte.toString(16).padStart(2, '0')).join(' ');
+        }
+
+        // Convert buffer to decimal representation
+        function bufferToDecimal(buffer) {
+            const view = new Uint8Array(buffer);
+            return Array.from(view).map(byte => byte.toString(10).padStart(3, '0')).join(' ');
+        }
+
         // Example usage:
         document.getElementById('connect').addEventListener('click', async function () {
             const device = await connectToNrealAir();
             if (device) {
+                console.warn('GOT DEVICE!', device);
                 const serialNumber = await readSerialNumber(device);
                 console.log('Serial Number:', serialNumber);
             }else{
